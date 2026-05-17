@@ -12,7 +12,6 @@ load_dotenv()
 from faster_whisper import WhisperModel
 import glob
 import logging
-import multiprocessing as mp
 import os
 import re
 import time
@@ -55,8 +54,6 @@ TRANSCRIBE_VAD_FILTER = True
 RAW_DIR = str(ROOT / "transcripts" / "raw")
 CLEAN_DIR = str(ROOT / "transcripts" / "clean")
 
-N_WORKERS = 4
-MAX_TASKS_PER_CHILD = 1
 VERBOSE = False
 DEBUG = 0
 FORCE_RESET = 0
@@ -196,8 +193,8 @@ if __name__ == "__main__":
     video_paths = [x for x in video_paths if "【" in x]
 
     DEBUG = 0
-    FORCE_RESET = 1
-
+    FORCE_RESET = 0
+    
     if FORCE_RESET:
         print('deleing existing transcripts outputs ...')
         for folder in[RAW_DIR, CLEAN_DIR]:
@@ -208,8 +205,7 @@ if __name__ == "__main__":
     os.makedirs(CLEAN_DIR, exist_ok=True)
 
     if DEBUG:
-        video_paths = [x for x in video_paths if "20260402" in x]
-        N_WORKERS = 1
+        video_paths = [x for x in video_paths if "20260402" in x or "20260401" in x]
         VERBOSE = True
     else:
         filtered_video_paths = []
@@ -223,20 +219,8 @@ if __name__ == "__main__":
             filtered_video_paths.append(video_path)
         video_paths = filtered_video_paths
 
-    if N_WORKERS <= 1:
-        for video_path in video_paths:
-            process_video(video_path)
-    else:
-        ctx = mp.get_context("spawn")
-        with ctx.Pool(N_WORKERS, maxtasksperchild=MAX_TASKS_PER_CHILD) as pool:
-            list(
-                tqdm(
-                    pool.imap_unordered(process_video, video_paths),
-                    total=len(video_paths),
-                    desc="videos",
-                    unit="video",
-                )
-            )
+    for video_path in tqdm(video_paths, total=len(video_paths), desc="videos", unit="video"):
+        process_video(video_path)
 
     transcript_paths = sorted(glob.glob(os.path.join(RAW_DIR, "*")))
     for transcript_path in tqdm(transcript_paths, desc="clean", unit="file"):
