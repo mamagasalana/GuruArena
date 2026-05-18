@@ -22,6 +22,7 @@ def get_tag_summary(
     final_by_date = defaultdict(set)
     norm2raw = defaultdict(set)
     raw2norm = defaultdict(set)
+    clean_transcript_cache = {}
 
     classification_map = {}
     classification_source = {}
@@ -59,10 +60,19 @@ def get_tag_summary(
         for f in sorted(glob.glob(pattern)):
             f2 = os.path.basename(f)
             date_str = re.findall(r'\d+', f2)[0]
+            if date_str not in clean_transcript_cache:
+                transcript_file = f"transcripts/clean/{date_str}.txt"
+                # if transcript file doesnt exist, we should let the script raise error
+                with open(transcript_file, "r", encoding="utf-8") as ifile:
+                    clean_transcript_cache[date_str] = ifile.read()
+
+            clean_transcript = clean_transcript_cache[date_str]
             with open(f, "r", encoding="utf-8-sig") as fp:
                 jsrows = json.load(fp)["instruments"]
                 for js in jsrows:
                     raw_inst = js['instrument']
+                    if raw_inst not in clean_transcript:
+                        continue
                     norm_inst = to_simplified.convert(js['instrument_normalized'])
                     norm2raw[norm_inst].add(raw_inst)
                     raw2norm[raw_inst].add(norm_inst)
@@ -83,8 +93,11 @@ def get_tag_summary(
 if __name__ == '__main__':
     import pandas as pd
 
-    ret = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-flash', classification_prefix='class8')
-    ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class9')
+    # ret = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-flash', classification_prefix='class8')
+    # ret2 = get_tag_summary('2026_04_24_t0', model_class='deepseek-v4-pro', classification_prefix='class9')
+
+    ret = get_tag_summary('2026_04_24_t1', model='deepseek-v4-flash', classification_prefix='class8')
+    ret2 = get_tag_summary('2026_04_24_t1', model='mimo-v2.5-pro', classification_prefix='class9')
 
 
     df = pd.DataFrame.from_dict(ret['classification_map'], orient='index')

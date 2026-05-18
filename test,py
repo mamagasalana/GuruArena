@@ -1,32 +1,33 @@
-from main.visualize import main
 from src.llm.mq_tag_summary import get_tag_summary
-ret = get_tag_summary(debug=True)
+ds1 = get_tag_summary('2026_04_24_t1', model='deepseek-v4-flash', classification_prefix='class8')
+mm1 = get_tag_summary('2026_04_24_t1', model='mimo-v2.5-pro', classification_prefix='class9')
+ds2 = get_tag_summary('2026_05_17_t0', model='deepseek-v4-flash', classification_prefix='class8')
+mm2 = get_tag_summary('2026_05_17_t0', model='mimo-v2.5-pro', classification_prefix='class9')
 
-main_keys = []
-raw_cluster = []
-norm_cluster = []
-for main_key in ret['raw_map_multi'].keys():
+original_text = open('/home/ytee/test/GuruArena/transcripts/clean/20241227.txt', 'r').read()
 
-    for r2 in raw_cluster:
-        if main_key in r2:
-            break
-    else:
-        tmp2 = ret['raw_map_multi'][main_key].copy()
-        tmp = set()
-        cnt = -1
+print('deepseek (old , new):', len(ds1['raw2norm']), len(ds2['raw2norm']))
+print('mimo (old , new):', len(mm1['raw2norm']), len(mm2['raw2norm']))
 
-        while cnt != len(tmp):
-            cnt  = len(tmp)
-            for v in tmp2:
-                tmp.update(ret['norm_map_multi'][v])
+print('Exist in deepseek, not in mimo')
+# print('v1', [x for x in ds1['raw2norm'] if x not in mm1['raw2norm'] and x in original_text ])
+print('v2', [x for x in ds2['raw2norm'] if x not in mm2['raw2norm'] and x in original_text ])
 
-            for v in tmp:
-                tmp2.update(ret['raw_map_multi'][v])
-            break
-        main_keys.append(main_key)
-        raw_cluster.append(tmp.copy())
-        norm_cluster.append(tmp2.copy())
-import pandas as pd
-df = pd.DataFrame(zip(main_keys, [list(x) for x in  raw_cluster], [list(x) for x in  norm_cluster]), columns=['key', 'raw', 'norm'])
-df['norm_count'] = df.norm.apply(lambda x: len(x))
-df[(df.raw != df.norm) ].to_csv('raw_norm.csv', index=False)
+print('Exist in mimo, not in deepseek')
+# print('v1', [x for x in mm1['raw2norm'] if x not in ds1['raw2norm'] and x in original_text ])
+print('v2', [x for x in mm2['raw2norm'] if x not in ds2['raw2norm'] and x in original_text ])
+
+# print('Exist in v1, not in v2')
+# print('deepseek', [x for x in ds1['raw2norm'] if x not in ds2['raw2norm'] and x in original_text ])
+# print('mimo', [x for x in mm1['raw2norm'] if x not in mm2['raw2norm'] and x in original_text ])
+
+print('Exist in v2, not in v1')
+print('deepseek', [x for x in ds2['raw2norm'] if x not in ds1['raw2norm'] and x in original_text ])
+print('mimo', [x for x in mm2['raw2norm'] if x not in mm1['raw2norm'] and x in original_text ])
+
+from template.template_20260424_2026 import SCHEMA_INSTRUMENT_RULES_EXTRACT2 as schema
+print(len(schema))
+
+
+with open('test.txt', 'r') as ifile:
+    print(len(ifile.read()))

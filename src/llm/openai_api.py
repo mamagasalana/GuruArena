@@ -393,6 +393,9 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
                 {"role": "user", "content": user_text},
             ],
             temperature=self.temperature,
+            extra_body={
+                "thinking": {"type": "enabled"}
+            },
         )
         return resp
     
@@ -426,6 +429,93 @@ class OPENAI_API_DEEPSEEK(OPENAI_API):
         usage = resp.usage.to_dict()
         return {
             "provider": "deepseek",
+            "model": resp.model,
+            "filename": filename,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "reasoning_tokens": usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0),
+            "cached_tokens": usage.get("prompt_tokens_details", {}).get("cached_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+            'time_spent': time_spent,
+        }
+
+
+class OPENAI_API_XIAOMI(OPENAI_API):
+    def __init__(self, pydantic_template: BaseModel,
+                 output_folder: str,
+                 schema: str,
+                 model: str = "mimo-v2.5-pro",
+                 temperature: float = 1.0,
+                 default_block_label="Transcript"):
+        super().__init__(
+            pydantic_template=pydantic_template,
+            output_folder=output_folder,
+            schema=schema,
+            model=model,
+            temperature=temperature,
+            default_block_label=default_block_label,
+        )
+        self.schema = f"""
+{schema}
+
+输出规则（严格）：
+- 仅输出有效的 JSON。
+- 不得输出任何非 JSON 内容（包括说明、注释）。
+
+输出内容必须严格符合以下 JSON Schema：
+{json.dumps(self.template.model_json_schema(), indent=2, ensure_ascii=False)}
+        """
+        FolderSchemaTracker().set(folder=output_folder, model=self.model, schema=self.schema)
+        self.client = OpenAI(
+            api_key=os.getenv('XIAOMI_API_KEY'),
+            base_url='https://token-plan-sgp.xiaomimimo.com/v1',
+        )
+        self._JSON_FENCE_RE = re.compile(
+            r"```(?:json)?\s*([\s\S]*?)\s*```",
+            re.IGNORECASE
+        )
+
+    def request(self, *, blocks: Sequence[Tuple[str, str]]):
+        user_text = _format_blocks(blocks)
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.schema},
+                {"role": "user", "content": user_text},
+            ],
+            temperature=self.temperature,
+        )
+        return resp
+
+    @override
+    def get_json2(self, transcript, helper):
+        return super().get_json2(transcript, helper)
+
+    @override
+    def get_json(self, text, block_label: Optional[str] = None):
+        return super().get_json(text, block_label=block_label)
+
+    @override
+    def extract_output(self, resp):
+        text = resp.choices[0].message.content
+
+        try:
+            js = json.loads(text)
+        except:
+            m = self._JSON_FENCE_RE.search(text)
+            js = json.loads(m.group(1).strip())
+
+        js2 = json.dumps(js, indent=2, ensure_ascii=False)
+
+        summary = getattr(resp.choices[0].message, 'reasoning_content', '')
+        used = resp.usage.total_tokens
+        return js2, summary, used
+
+    @override
+    def normalize_usage(self, resp, filename, time_spent):
+        usage = resp.usage.to_dict()
+        return {
+            "provider": "xiaomi",
             "model": resp.model,
             "filename": filename,
             "prompt_tokens": usage.get("prompt_tokens", 0),
