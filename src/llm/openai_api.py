@@ -484,6 +484,9 @@ class OPENAI_API_XIAOMI(OPENAI_API):
                 {"role": "user", "content": user_text},
             ],
             temperature=self.temperature,
+            extra_body={
+                "thinking": {"type": "enabled"}
+            },
         )
         return resp
 

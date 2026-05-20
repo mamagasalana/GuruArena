@@ -5,3 +5,4 @@ export CUDNN_PATH="/home/ytee/test/GuruArena/venv/lib/python3.11/site-packages/n
 export LD_LIBRARY_PATH="/home/ytee/test/GuruArena/venv/lib/python3.11/site-packages/nvidia/cudnn/lib"
 
 venv/bin/python pipelines/transcript/generate_transcript.py
+venv/bin/python pipelines/ocr_text/generate_ocr.py

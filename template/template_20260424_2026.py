@@ -432,18 +432,13 @@ SCHEMA_VERSION=2026-05-17T00:00:00
 - 隐含：可自然对应为可交易市场暴露的广义市场 / 行业 / 主题 / 因子 / 地区
 - 不包含 ETF / 基金
 
-=== 字段分工 ===
-- instrument：只保留 Transcript 原始表面串，供回放 / 核对 / 审计
-- instrument_normalized / instrument_normalized_zh：表达你认为原文实际上想指什么
-- 重要的事情说三遍：
-  - instrument 保留原样。
-  - instrument 保留原样。
-  - instrument 保留原样。
-
 === 硬规则 ===
-1) instrument 必须是 Transcript 的连续子串，精确抄写，不得改写、翻译、补字、换字。
-2) 任何 ASR 修正、标准化、金融化解释，只能写在 normalized 字段，不能回写到 instrument。
-3) 不得因为你“懂它在说什么”，就把 Transcript 里没出现的更标准、更完整、更漂亮的说法写进 instrument。
+1) instrument 只保留 Transcript 原始表面串，供回放 / 核对 / 审计；instrument_normalized / instrument_normalized_zh 只负责表达你认为原文实际上想指什么。
+2) 重要的事情说三遍：
+   - instrument 保留原样。
+   - instrument 保留原样。
+   - instrument 保留原样。
+3) instrument 必须是 Transcript 的连续子串，精确抄写；不得改写、翻译、补字、换字，也不得因为你“懂它在说什么”，就把 Transcript 里没出现的更标准、更完整、更漂亮的说法写进 instrument。任何 ASR 修正、标准化、金融化解释，都只能写在 normalized 字段。
 4) 对同一候选片段，要分开判断：
    - 它是一个 instrument，还是多个 instrument 黏在一起；
    - 它标准化后最可能指什么。
@@ -485,12 +480,21 @@ SCHEMA_VERSION=2026-05-17T00:00:00
 === 标准化 ===
 - instrument_normalized：优先 ticker / 交易所符号 / 官方英文名 / 最常见英文市场名
 - instrument_normalized_zh：最自然、最稳定、最适合中文财经语境检索的中文标准名
+- 对个股 / 公司，若能可靠识别到本地主要上市 ticker，则优先使用该本地 ticker / 本地上市身份。
+- 若同一公司同时存在本地上市版本与 ADR / 美股存托凭证版本，默认优先本地主要上市版本；只有当 Transcript 明确提到 ADR / DR / 美股代码 / 纳斯达克 / 纽交所 / 美股上市语境时，才使用对应 ADR / 美股版本。
+- 若你把某项识别为“股票 / 公司”，则 instrument_normalized 只能输出两种结果：
+  1) 高置信的本地主要上市 ticker；
+  2) unknown_stock。
 - 若无法可靠标准化，则 normalized 直接等于 instrument
 - 若原文包含到期 / 交割日期，要剔除这些日期；但期限要保留
 
 === 广义市场 / 行业 / 因子 ===
 - 原文若是较粗的市场 / 地区 / 行业 / 因子称呼，instrument 仍保留原文表面串；更具体的金融理解只写进 normalized。
 - 不要把广义市场概念擅自收窄成单一代表指数、ETF、行业指数或产品名称。
+- 对“国家 / 地区 + 股票 / 股市 / 市场”这类广义股票市场暴露，不要把 normalized 写成交易所名称、具体指数名称或 ticker；保持为稳定、宽泛的市场名称即可。
+- 单独的国家名 / 地区名本身不是 instrument。
+- 只有当原文本身就是明确的市场 / 资产暴露提法时才抽取，例如它必须带有“股市 / 股票 / 国债 / 债 / 汇率 / 货币 / 市场”等资产或市场语义；
+  不要仅因上下文在谈金融，就把裸的“美国 / 日本 / 中国 / 欧洲 / 香港 / 大陆”等国家地区名单独抽成 instrument。
 
 === geography ===
 - 单一货币、货币对、商品、主流加密货币：默认 GLOBAL
@@ -512,6 +516,9 @@ field_instrument_normalized_deepseek = Field( ...,
         "主标准化后的可交易资产标识，用于对齐与检索（一般优先：ticker/交易所符号；"
         "其次：官方全称；再次：常用英文名/缩写）。"
         "该字段主要用于兼容当前下游流程，默认应优先使用英文、ticker、官方英文简称或最常见英文市场名称。"
+        "对个股/公司，若能可靠识别到本地主要上市 ticker，则优先使用本地 ticker / 本地上市身份，而不是 ADR / 美股存托凭证版本。"
+        "若同一公司同时存在本地上市版本与 ADR / 美股存托凭证版本，默认优先本地主要上市版本；只有当原文明确提到 ADR / DR / 美股代码 / 纳斯达克 / 纽交所 / 美股上市语境时，才使用对应 ADR / 美股版本。"
+        "若你把某项识别为股票/公司，则本字段只能输出两种结果：高置信的本地主要上市 ticker，或 unknown_stock。"
         "【剔除到期/交割日期，但保留期限】若 instrument 原文包含任何“到期/交割”等日历日期信息（年月日/具体时间等）或期货合约的月份/年份/代码（如“黄金2406”“CLZ4”“WTI 2024年12月合约”“美债10年期 2024年12月到期”），"
         "instrument_normalized 必须剔除这些“到期/交割日期”信息，只保留“标的本体/基准标的”（如“Gold”“WTI Crude Oil”）。"
         "【期限保留规则】若原文包含“期限/久期/年期/tenor”（如“2年期/10年期/30年期/10Y/10yr”），该期限信息属于“标的本体”，必须保留；需要剔除的是“到期/交割日期”。例如 instrument='美债10年期 2024年12月到期' 时，instrument_normalized 应为 'US 10Y Treasury'（而不是 'US Treasury'）。"

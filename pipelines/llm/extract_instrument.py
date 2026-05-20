@@ -28,7 +28,7 @@ TRANSCRIPT_GLOB = 'transcripts/clean/*'
 OCR_JSON_FOLDER = 'ocr/json'
 # MODEL = 'deepseek-v4-flash'
 MODEL = 'mimo-v2.5-pro'
-OUTPUT_PREFIX = '2026_05_17_t0'
+OUTPUT_PREFIX = '2026_05_17_t1'
 BATCHES = range(3)
 
 nf = NormFinder('')
@@ -130,7 +130,7 @@ def run(batch_dates=None , debug=False):
 if __name__ == '__main__':
     import datetime
     print(len(schema), datetime.datetime.now())
-    MODEL = 'deepseek-v4-flash'
+    MODEL = 'deepseek-v4-pro'
     print(run(['20241227'], debug=True))
     MODEL = 'mimo-v2.5-pro'
     print(run(['20241227'], debug=True))
