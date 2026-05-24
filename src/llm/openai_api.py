@@ -16,7 +16,7 @@ import json
 
 
 from typing_extensions import override
-from typing import Iterable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Iterable, Iterator, Optional, Sequence, Tuple, Type, Union
 import time
 import asyncio
 import nest_asyncio
@@ -317,10 +317,6 @@ class OPENAI_API:
                     if pbar is not None:
                         pbar.update(1)
                         pbar.set_postfix({"status": "error"})
-                    if raise_on_error:
-                        if pbar is not None:
-                            pbar.close()
-                        raise
             if pbar is not None:
                 pbar.close()
 
@@ -528,6 +524,15 @@ class OPENAI_API_XIAOMI(OPENAI_API):
             "total_tokens": usage.get("total_tokens", 0),
             'time_spent': time_spent,
         }
+
+
+def get_app_cls(model: str) -> Type[OPENAI_API]:
+    provider = model.split('-', 1)[0]
+    if provider == 'mimo':
+        return OPENAI_API_XIAOMI
+    if provider == 'deepseek':
+        return OPENAI_API_DEEPSEEK
+    return OPENAI_API
     
 
 if __name__ == "__main__":

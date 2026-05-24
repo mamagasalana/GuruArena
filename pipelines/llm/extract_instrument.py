@@ -9,10 +9,10 @@ from dotenv import load_dotenv
 import glob
 import json
 import os
-from typing import Dict, Type
+from typing import Dict
 
 from src.llm.mq_iterclass import iter_items_from_files_with_helpers
-from src.llm.openai_api import OPENAI_API, OPENAI_API_DEEPSEEK, OPENAI_API_XIAOMI
+from src.llm.openai_api import OPENAI_API, get_app_cls
 from src.transcript.normalize_transcript import NormFinder
 from template.template_20260424_2026 import (
     SCHEMA_INSTRUMENT_RULES_EXTRACT2 as schema,
@@ -34,22 +34,15 @@ BATCHES = range(3)
 nf = NormFinder('')
 
 
-def get_app_cls() -> Type[OPENAI_API]:
-    provider = MODEL.split('-', 1)[0]
-    if provider == 'mimo':
-        return OPENAI_API_XIAOMI
-    return OPENAI_API_DEEPSEEK
-
-
-def build_apps() -> Dict[int, OPENAI_API]:
-    app_cls = get_app_cls()
+def build_apps(model, output_prefix, batches) -> Dict[int, OPENAI_API]:
+    app_cls = get_app_cls(model)
     apps: Dict[int, OPENAI_API] = {}
-    for batch in BATCHES:
+    for batch in batches:
         apps[batch] = app_cls(
             ts,
-            '%s_%s' % (OUTPUT_PREFIX, batch),
+            '%s_%s' % (output_prefix, batch),
             schema,
-            model=MODEL,
+            model=model,
             temperature=0,
         )
     return apps
@@ -93,8 +86,8 @@ def build_helper(dt: str):
     return json.dumps(helper, ensure_ascii=False)
 
 
-def run(batch_dates=None , debug=False):
-    apps = build_apps()
+def run(batch_dates=None, debug=False):
+    apps = build_apps(model=MODEL, output_prefix=OUTPUT_PREFIX, batches=BATCHES)
     errlist = []
 
     if batch_dates is None:
@@ -118,7 +111,7 @@ def run(batch_dates=None , debug=False):
                 app.run_batch_multiprocess(
                     iter_items_from_files_with_helpers(files, helpers=helpers),
                     show_progress=False,
-                    force=debug
+                    force=debug,
                 )
             except Exception as e:
                 # pbar.write('error %s %s %s' % (dt, batch, e))
@@ -130,7 +123,9 @@ def run(batch_dates=None , debug=False):
 if __name__ == '__main__':
     import datetime
     print(len(schema), datetime.datetime.now())
-    MODEL = 'deepseek-v4-pro'
-    print(run(['20241227'], debug=True))
     MODEL = 'mimo-v2.5-pro'
-    print(run(['20241227'], debug=True))
+    OUTPUT_PREFIX = '2026_05_17_t1'
+    run()
+    MODEL = 'deepseek-v4-pro'
+    OUTPUT_PREFIX = '2026_05_17_t1'
+    run()
