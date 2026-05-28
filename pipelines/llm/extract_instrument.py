@@ -6,15 +6,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from dotenv import load_dotenv
-import glob
 import json
 import os
-from typing import Dict
 
 from src.llm.mq_iterclass import iter_items_from_files_with_helpers
-from src.llm.openai_api import OPENAI_API, get_app_cls
-from src.transcript.normalize_transcript import NormFinder
-from template.template_20260424_2026 import (
+from src.llm.mq_pipeline import (
+    build_batch_apps,
+    build_ocr_text,
+    list_batch_dates,
+    list_transcript_files,
+)
+from template.template_20260525_2204 import (
     SCHEMA_INSTRUMENT_RULES_EXTRACT2 as schema,
     TradingInstrument as ts,
 )
@@ -31,75 +33,34 @@ MODEL = 'mimo-v2.5-pro'
 OUTPUT_PREFIX = '2026_05_17_t1'
 BATCHES = range(3)
 
-nf = NormFinder('')
-
-
-def build_apps(model, output_prefix, batches) -> Dict[int, OPENAI_API]:
-    app_cls = get_app_cls(model)
-    apps: Dict[int, OPENAI_API] = {}
-    for batch in batches:
-        apps[batch] = app_cls(
-            ts,
-            '%s_%s' % (output_prefix, batch),
-            schema,
-            model=model,
-            temperature=0,
-        )
-    return apps
-
-
-def list_batch_dates():
-    batch_date = set()
-    for f in glob.glob(TRANSCRIPT_GLOB):
-        dt = os.path.basename(f)[:7] + '*'
-        batch_date.add(dt)
-    return sorted(batch_date)
-
-
-def build_ocr_text(dt: str) -> str:
-    ocr_path = os.path.join(OCR_JSON_FOLDER, f'【{dt}】.json')
-    if not os.path.exists(ocr_path):
-        return ''
-
-    try:
-        with open(ocr_path, 'r', encoding='utf-8') as ifile:
-            payload = json.load(ifile)
-    except Exception:
-        return ''
-
-    sorted_items = sorted(payload["data"].items(), key=lambda x: x[0])
-
-    snippets = []
-    for _, entry in sorted_items:
-        text_raw = entry.get('text_zh', [])
-        if text_raw:
-            snippets.append(''.join(text_raw))
-
-    return nf.normalize_zh_transcript('\n\n'.join(snippets).strip())
-
 
 def build_helper(dt: str):
     helper = {}
-    ocr_text = build_ocr_text(dt)
+    ocr_text = build_ocr_text(dt, OCR_JSON_FOLDER)
     if ocr_text:
         helper['ocr_text'] = ocr_text
     return json.dumps(helper, ensure_ascii=False)
 
 
 def run(batch_dates=None, debug=False):
-    apps = build_apps(model=MODEL, output_prefix=OUTPUT_PREFIX, batches=BATCHES)
+    apps = build_batch_apps(
+        ts,
+        schema,
+        MODEL,
+        OUTPUT_PREFIX,
+        BATCHES,
+        temperature=0,
+    )
     errlist = []
 
     if batch_dates is None:
-        batch_dates = list_batch_dates()
+        batch_dates = list_batch_dates(TRANSCRIPT_GLOB)
 
     pbar = tqdm(batch_dates, desc='extract instrument', unit='day')
     for dt in pbar:
-        files = []
-        files.extend(glob.glob(f'transcripts/clean/{dt}.txt'))
+        files = list_transcript_files(dt)
         if not files:
             continue
-        files = sorted(files)
         helpers = []
         for transcript_file in files:
             dt2 = os.path.basename(transcript_file).split('.')[0]

@@ -536,13 +536,4 @@ def get_app_cls(model: str) -> Type[OPENAI_API]:
     
 
 if __name__ == "__main__":
-    load_dotenv() 
-    OUTPUT_FOLDER= os.getenv('OUTPUT_FOLDER')
-    assert OUTPUT_FOLDER , "output folder missing?"
-
-    from src.llm.schemas import SCHEMA_DEVELOPER_OPENAI
-    from template.template import TopicChunks
-
-    app = OPENAI_API(TopicChunks, OUTPUT_FOLDER, SCHEMA_DEVELOPER_OPENAI)
-    for _ in app.run_batch(app.iter_items_from_glob(None)):
-        break
+    pass

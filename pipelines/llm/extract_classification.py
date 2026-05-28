@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 import json
 
 from src.llm.mq_iterclass import texts_to_items
+from src.llm.mq_pipeline import build_app, chunk_rows
 from src.llm.mq_tag_summary import get_tag_summary
-from src.llm.openai_api import get_app_cls
-from template.template_20260424_2026 import (
+from template.template_20260525_2204 import (
     InstrumentTag as template,
     SCHEMA_INSTRUMENT_TAG_CLASSIFICATION2 as schema,
 )
@@ -45,10 +45,6 @@ def pending_classification_inputs(prefix, model, model_class, classification_pre
     ]
 
 
-def chunk_inputs(rows, chunk_size=30):
-    return [rows[i:i + chunk_size] for i in range(0, len(rows), chunk_size)]
-
-
 def run():
     rows = pending_classification_inputs(
         prefix=INSTRUMENT_OUTPUT_PREFIX,
@@ -56,16 +52,15 @@ def run():
         model_class=MODEL_CLASS,
         classification_prefix=CLASSIFICATION_OUTPUT_PREFIX,
         )
-    chunks = chunk_inputs(rows, CHUNK_SIZE)
+    chunks = chunk_rows(rows, CHUNK_SIZE)
     texts = [json.dumps(chunk, ensure_ascii=False) for chunk in chunks]
 
-    app_cls = get_app_cls(MODEL_CLASS)
-    app = app_cls(
-        pydantic_template=template,
-        output_folder=CLASSIFICATION_OUTPUT_PREFIX,
-        schema=schema,
+    app = build_app(
+        template,
+        schema,
+        MODEL_CLASS,
+        CLASSIFICATION_OUTPUT_PREFIX,
         default_block_label='Input',
-        model=MODEL_CLASS,
         temperature=0,
     )
     return app.run_batch_multiprocess(texts_to_items(texts))
@@ -73,12 +68,12 @@ def run():
 
 if __name__ == '__main__':
 
-    MODEL = 'mimo-v2.5-pro' # model from instrument extraction
-    MODEL_CLASS = 'mimo-v2.5-pro' # model for tag summary
-    INSTRUMENT_OUTPUT_PREFIX = '2026_05_17_t1'
-    CLASSIFICATION_OUTPUT_PREFIX = 'class1_20260517'
-    CHUNK_SIZE = 30
-    run()
+    # MODEL = 'mimo-v2.5-pro' # model from instrument extraction
+    # MODEL_CLASS = 'mimo-v2.5-pro' # model for tag summary
+    # INSTRUMENT_OUTPUT_PREFIX = '2026_05_17_t1'
+    # CLASSIFICATION_OUTPUT_PREFIX = 'class1_20260517'
+    # CHUNK_SIZE = 30
+    # run()
 
     MODEL = 'deepseek-v4-pro' # model from instrument extraction
     MODEL_CLASS = 'deepseek-v4-pro' # model for tag summary
