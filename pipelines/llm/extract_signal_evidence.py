@@ -20,8 +20,8 @@ from src.llm.mq_pipeline import (
 )
 from src.llm.mq_tag_summary import get_tag_summary
 from template.template_20260525_2204 import (
-    SCHEMA_SIGNAL_EXTRACT2 as schema,
-    TradingSignal as template,
+    SCHEMA_EVIDENCE_EXTRACT as schema,
+    SignalEvidence as template,
 )
 from tqdm import tqdm
 
@@ -89,7 +89,9 @@ def build_instruments(dt: str, classification_map) -> List[dict]:
                 continue
             if ticker:
                 instrument_normalized = f'{instrument_normalized}_{ticker}'
-            if geography:
+            if geography.lower() in ['', 'unclear']:
+                continue
+            else:
                 instrument_normalized = f'{instrument_normalized}_{geography}'
 
             if instrument_normalized not in helper_map:
@@ -158,7 +160,9 @@ def run(batch_dates=None, debug=False):
 
 if __name__ == '__main__':
     import datetime
-    print(len(schema), datetime.datetime.now())
+    
     batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
-    # batchlist=  batchlist[:1]
-    run(batchlist)
+    batchlist=  batchlist[:4]
+    batchlist = ['20211223']
+    print(len(schema), datetime.datetime.now(), batchlist)
+    run(batchlist, debug=True)

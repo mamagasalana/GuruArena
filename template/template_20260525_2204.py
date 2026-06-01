@@ -1,68 +1,78 @@
-from template.template_20260424_2026 import (
-    InstrumentTag,
-    Intent,
-    TradingInstrument,
-    TradingSignal,
-    TradingSignalBase,
-)
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+class SignalEvidenceBase(BaseModel):
+    instrument: List[str] = Field(
+        ...,
+        description="必须直接复制 Helper 对应项的 instrument 列表"
+    )
+    instrument_normalized: str = Field(
+        ...,
+        description="必须直接复制 Helper 对应项的 instrument_normalized"
+    )
+    direction_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达价格方向预期（上涨/下跌/反弹/回调/机会/风险等）的原文片段"
+    )
+    action_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达交易动作（买卖/开仓/平仓/减仓/停损等）的原文片段"
+    )
+    price_level_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达价格位置或估值（高位/低位/高峰/底部/颈线/跌过头等）的原文片段"
+    )
+    technical_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达技术分析或形态（突破/跌破/头肩顶/月线转强等）的原文片段"
+    )
+    conditional_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达条件或假设（如果/假如/一旦等）的原文片段"
+    )
+    rhetoric_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达特殊修辞或语气（反问、反向思考、讽刺、反话等）的原文片段"
+    )
+    negation_uncertainty_evidence: List[str] = Field(
+        default_factory=list,
+        description="表达否定（不/不是/并非）或不确定性（可能/也许/不确定）的原文片段"
+    )
+
+class SignalEvidence(BaseModel):
+    signals: List[SignalEvidenceBase] = Field(
+        default_factory=list,
+        description="每个 helper item 对应一个 SignalEvidenceBase 对象"
+    )
 
 
-SCHEMA_SIGNAL_EXTRACT2 = r"""
-SCHEMA_VERSION=2026-05-25T00:00:00
-你是中文财经分析师，负责从杨世光节目逐字稿中判断交易信号。
+SCHEMA_EVIDENCE_EXTRACT = r"""
+SCHEMA_VERSION=2026-06-01T16:30:00
+你是中文财经分析师，负责从财经节目逐字稿中提取关于特定标的的多维度证据。
 
 输入有两个块：
-- Transcript：完整逐字稿
-- Helper：JSON 对象，格式通常为
-  - `{"instruments": [{"instrument": [...], "instrument_normalized": "..."}], "ocr_text": "..."}`
-
-其中：
-- `Helper.instruments` 是上游前两步已经整理好的候选标的列表，也是本步骤必须覆盖的目标集合。
-- `instrument` 是帮助回到原文定位的触发词/别名列表。
-- `instrument_normalized` 是本步骤真正要判断的目标标识，可信度高于 `instrument`。它可能是工作流拼出来的目标键，例如 `underlying_asset` 再加上 ticker / geography 后缀；你应把它当作上游给定的目标标签直接沿用，不要自行拆解、改写或重命名。
-- `ocr_text` 只是辅助上下文，用来帮助修正 ASR 或补足投影片信息；信任顺序必须是 Transcript 第一，OCR 第二。
+- Transcript：完整逐字稿，主证据
+- Helper：候选标的与辅助 OCR
 
 你的任务：
-- 对 `Helper.instruments` 中每个 helper item 判断交易意图并输出 `signals`
-- 不重新抽取标的，不改写 helper，不新增 helper 外的标的
+- 对 `Helper.instruments` 中每个 helper item，找出 Transcript 中所有与该标的相关的评论。
+- 将评论按以下维度分类，每个维度输出对应的原文证据片段（必须是连续原文子串，逐字复制）。
+- 不输出任何意图判断（如 bullish/bearish），只输出证据。
 
-intent 只能是：
-- `open_buy`：偏多、偏布局、给出支持做多的理由
-- `open_sell`：偏空、偏做空、给出支持后市看跌或继续转弱的理由
-- `close_buy`：否定当前做多动作，如不要追、先观望、减仓、应离场、保持高现金
-- `close_sell`：否定当前做空动作，如空单回补、不要继续做空
-- `unclear`：仅提及、举例、描述现象，证据不足以形成可执行方向
-- `invalid`：helper 目标虽然可交易，但当前语境下这次提及并不是在讨论该标的本身，而是在引用报告、消息来源、机构观点、人物发言、举例、背景材料，或属于明显错配
-- `duplicate`：与另一个 helper item 实际在说同一件事，但当前 item 更弱或更不贴切
-
-核心判断规则：
-1. 主持人常用含蓄表达。即使没直接说“买入/卖出”，只要给出清晰方向理由，也可判为 `open_buy` / `open_sell`。
-2. 只描述事实不等于交易建议。单纯涨跌、数据、背景介绍通常是 `unclear`。
-3. 要区分 `open_sell` 和 `close_buy`：
-   - 明确看空、应做空、后市看跌、泡沫/风险将导致下跌，更像 `open_sell`
-   - “应离场”“不要追”“等拉回再买”“先观望”“提高现金水位”这类是否定当前做多动作，更像 `close_buy`
-4. 同理，要区分 `open_buy` 和 `close_sell`。
-5. 同一个 helper item 若在 Transcript 中出现多个不同 intent，可以输出多条 signal；但这些 signal 必须重复使用完全相同的 `instrument` 列表和完全相同的 `instrument_normalized`。若只是同方向重复支持，应合并成一条。
-6. `duplicate` 只用于不同 helper item 之间。若多个 helper item 明显在说同一标的/同一讨论目标，保留更贴切者给真实信号，较弱者标 `duplicate`。
-7. 若同公司同时出现本地上市版本与 ADR/美股版本，默认优先保留本地上市/原属市场版本；除非 Transcript 明确指向更具体的 ADR/美股版本。
-8. `unclear` / `invalid` 都是兜底结果：一旦已有更明确 intent，就不要再额外输出 `unclear`；若判为 `invalid`，不要再并列输出其它 intent。
+维度定义：
+1. `direction_evidence`：表达价格方向预期（上涨/下跌/反弹/回调/机会/风险等）。
+2. `action_evidence`：表达交易动作（买卖/开仓/平仓/减仓/停损等）。
+3. `price_level_evidence`：表达价格位置或估值（高位/低位/高峰/底部/颈线/跌过头等）。
+4. `technical_evidence`：表达技术分析或形态（突破/跌破/头肩顶/月线转强等）。
+5. `conditional_evidence`：表达条件或假设（如果/假如/一旦等）。
+6. `rhetoric_evidence`：表达特殊修辞或语气（反问、反向思考、讽刺、反话等）。
+7. `negation_uncertainty_evidence`：表达否定（不/不是/并非）或不确定性（可能/也许/不确定）。
 
 输出约束：
-1. 必须覆盖 `Helper.instruments` 中的全部 helper item；每个 helper item 至少对应一条 signal。
-2. 不得输出 helper 之外的 instrument。
-3. 每条 signal 的 `instrument` 与 `instrument_normalized` 必须直接复制对应 helper item，不能改写、翻译、重排、删减或补充。不得把同一 helper item 的 aliases 拆成多条不同 signal，也不得只取 aliases 的一部分输出。
-4. 单条 signal 只表达一个清晰 intent。
-5. 所有判断必须以 Transcript 为主；OCR 只能辅助理解，不能推翻已清楚表达的 Transcript。
-6. 每条 signal 都必须有至少 1 条 `evidence` 和至少 1 条 `summary`；不允许空的 evidence / summary signal。
-7. `evidence` 中每一项都必须是 Transcript 中真实存在的连续原文子串，逐字复制，不得改写、拼接或凭空生成。
-8. `summary[i]` 只解释 `evidence[i]` 为什么支持当前 intent；不得引入 Transcript 之外的新事实。
-9. `summary` 与 `evidence` 必须一一对应，数量必须相同。
-
-优先级建议：
-- 若 helper 的多个别名都指向同一 `instrument_normalized`，以 `instrument_normalized` 为主目标做统一判断。
-- 若 Transcript 与 OCR 不一致，优先按 Transcript 判断。
-- 若只是拿某标的做宏观举例或类比，没有给出操作导向，优先判 `unclear`。
-- 若原文只是说“JP Morgan 报告指出…”、“高盛认为…”这类来源引用，而不是在讨论该机构股票本身，应优先判 `invalid`，而不是输出该股票的方向性信号。
+1. 必须覆盖 `Helper.instruments` 中的全部 helper item。
+2. 每个 helper item 输出一个对象，包含上述 7 个证据列表（未找到证据的维度保持空数组）。
+3. `instrument` 和 `instrument_normalized` 必须直接复制 Helper 对应项，不得改写。
+4. 每一条证据必须是 Transcript 中真实存在的连续原文子串，逐字复制，不得改写、拼接或省略。
 """
 
 SCHEMA_INSTRUMENT_RULES_EXTRACT2 = r"""
