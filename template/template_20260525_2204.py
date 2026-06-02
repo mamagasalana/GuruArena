@@ -1,6 +1,26 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+from template.template_20260424_2026 import (
+    InstrumentTag,
+    TradingInstrument,
+)
+
+
+class EvidenceItem(BaseModel):
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Transcript 中真实存在的连续原文子串，逐字复制，不得改写"
+    )
+    summary: str = Field(
+        ...,
+        min_length=1,
+        description="用中文简要解释该原文片段在该维度下表达了什么含义（1-2句），"
+                     "说明主持人的观点、判断或语境，供下游信号分类使用"
+    )
+
+
 class SignalEvidenceBase(BaseModel):
     instrument: List[str] = Field(
         ...,
@@ -10,33 +30,51 @@ class SignalEvidenceBase(BaseModel):
         ...,
         description="必须直接复制 Helper 对应项的 instrument_normalized"
     )
-    direction_evidence: List[str] = Field(
+    direction_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达价格方向预期（上涨/下跌/反弹/回调/机会/风险等）的原文片段"
+        description="表达价格方向预期（上涨/下跌/反弹/回调/机会/风险等）的证据项"
     )
-    action_evidence: List[str] = Field(
+    action_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达交易动作（买卖/开仓/平仓/减仓/停损等）的原文片段"
+        description="表达交易动作（买卖/开仓/平仓/减仓/停损等）的证据项"
     )
-    price_level_evidence: List[str] = Field(
+    price_level_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达价格位置或估值（高位/低位/高峰/底部/颈线/跌过头等）的原文片段"
+        description="表达价格位置或估值（高位/低位/高峰/底部/颈线/跌过头等）的证据项"
     )
-    technical_evidence: List[str] = Field(
+    technical_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达技术分析或形态（突破/跌破/头肩顶/月线转强等）的原文片段"
+        description="表达技术分析或形态（突破/跌破/头肩顶/月线转强等）的证据项"
     )
-    conditional_evidence: List[str] = Field(
+    conditional_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达条件或假设（如果/假如/一旦等）的原文片段"
+        description="表达条件或假设（如果/假如/一旦等）的证据项"
     )
-    rhetoric_evidence: List[str] = Field(
+    rhetoric_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达特殊修辞或语气（反问、反向思考、讽刺、反话等）的原文片段"
+        description="表达特殊修辞或语气（反问、反向思考、讽刺、反话等）的证据项"
     )
-    negation_uncertainty_evidence: List[str] = Field(
+    negation_uncertainty_evidence: List[EvidenceItem] = Field(
         default_factory=list,
-        description="表达否定（不/不是/并非）或不确定性（可能/也许/不确定）的原文片段"
+        description="表达否定（不/不是/并非）或不确定性（可能/也许/不确定）的证据项"
+    )
+    other_evidence: List[EvidenceItem] = Field(
+        default_factory=list,
+        description="无法归入以上 7 个维度的其他相关证据项（仅在前述维度均不适用时使用，勿滥用）"
+    )
+    invalid: bool = Field(
+        default=False,
+        description="该标的在 Transcript 中的提及不构成可用的交易证据。"
+                     "满足以下任一条件时应设为 True：仅提及/枚举/一笔带过；"
+                     "作为历史举例或类比（如 GE 分拆作为过去事件举例）；"
+                     "该标的在文中充当信息源/发布方（如机构发布报告、媒体来源）而非被讨论的交易对象；主持人引用外部观点来支持自己的判断不在此列，本项仅针对标的本身是信源的情况"
+                     "描述过往现象而非当前观点；"
+                     "属于明显错配或非交易语境。"
+                     "设为 True 时各 evidence 维度可留空，下游将跳过该标的的信号分类"
+    )
+    invalid_reason: str = Field(
+        ...,
+        description="当 invalid=True 时，简短说明为何该提及不构成交易证据（1 句即可）；invalid=False 时填 null"
     )
 
 class SignalEvidence(BaseModel):
@@ -57,7 +95,7 @@ SCHEMA_VERSION=2026-06-01T16:30:00
 你的任务：
 - 对 `Helper.instruments` 中每个 helper item，找出 Transcript 中所有与该标的相关的评论。
 - 将评论按以下维度分类，每个维度输出对应的原文证据片段（必须是连续原文子串，逐字复制）。
-- 不输出任何意图判断（如 bullish/bearish），只输出证据。
+- 仅陈述已发生的市场事实，若上下文不含主持人的判断、预期、分析或操作倾向，则不应提取为证据。注意：事实性片段本身若被主持人用于支撑其分析或交易结论，仍应提取；本规则针对的是整段评论缺乏主持人观点的情况，而非单一片段的字面语义。
 
 维度定义：
 1. `direction_evidence`：表达价格方向预期（上涨/下跌/反弹/回调/机会/风险等）。
@@ -67,12 +105,27 @@ SCHEMA_VERSION=2026-06-01T16:30:00
 5. `conditional_evidence`：表达条件或假设（如果/假如/一旦等）。
 6. `rhetoric_evidence`：表达特殊修辞或语气（反问、反向思考、讽刺、反话等）。
 7. `negation_uncertainty_evidence`：表达否定（不/不是/并非）或不确定性（可能/也许/不确定）。
+8. `other_evidence`：无法归入以上 7 个维度的其他相关证据。仅在前述维度均不适用时使用，勿滥用。
+
+维度归类规则：若同一原文片段可归入多个维度，选择最具体、最贴近该片段核心含义的维度，不得将同一条原文片段重复放入多个维度。
+
+每条证据由两个字段组成：
+- `text`：Transcript 中真实存在的连续原文子串，逐字复制，不得改写。
+- `summary`：用中文简要解释该原文片段在该维度下表达了什么含义（1-2句），说明主持人的观点、判断或语境，方便下游信号分类使用。
 
 输出约束：
-1. 必须覆盖 `Helper.instruments` 中的全部 helper item。
-2. 每个 helper item 输出一个对象，包含上述 7 个证据列表（未找到证据的维度保持空数组）。
-3. `instrument` 和 `instrument_normalized` 必须直接复制 Helper 对应项，不得改写。
-4. 每一条证据必须是 Transcript 中真实存在的连续原文子串，逐字复制，不得改写、拼接或省略。
+1. 【重要】先判断每条 helper item 的提及是否构成有效交易证据。若该标的在 Transcript 中的提及属于以下情况，应将 `invalid` 设为 True，且 `invalid_reason` 给出简短原因，各 evidence 维度留空：
+   - 仅提及/枚举/一笔带过，未展开讨论
+   - 作为历史举例、类比或背景材料
+   - 该标的在文中充当信息源/发布方（如机构发布报告、媒体来源），而非被讨论的交易对象（注意：主持人引用外部观点来支撑自己的判断不在此列，本项仅针对标的本身是信源的情况）
+   - 描述过往现象，并非表达当前观点或预期
+   - 明显错配（如把公司名当成产品名提及）或非交易语境
+   invalid=True 与任何非空 evidence 维度互斥，绝不可同时出现。
+2. 必须覆盖 `Helper.instruments` 中的全部 helper item。
+3. 每个 helper item 输出一个对象，包含上述 8 个证据列表（未找到证据的维度保持空数组）。
+4. `instrument` 和 `instrument_normalized` 必须直接复制 Helper 对应项，不得改写。
+5. 每一条证据的 `text` 字段必须是 Transcript 中真实存在的连续原文子串，逐字复制，不得改写、拼接或省略；`summary` 字段用中文解释该证据的含义（1-2句）。
+6. 若一条评论同时涉及多个 helper item，应将证据分别归入各自对应的 helper item，允许同一条原文片段出现在不同 helper item 中。
 """
 
 SCHEMA_INSTRUMENT_RULES_EXTRACT2 = r"""
