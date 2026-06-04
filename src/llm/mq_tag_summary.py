@@ -41,6 +41,10 @@ def get_tag_summary(
             tmp = []
             ticker = x['ticker']
 
+            if norm_inst in ['unknown_stock']:
+                # ytee 24 May 2026: we use ensemble, can skip if it fail to recognize
+                continue
+            
             for ua in x['underlying_assets']:
                 if len(x['underlying_assets']) == 2 and ua == 'fx_usd':
                     continue

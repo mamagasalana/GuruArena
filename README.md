@@ -41,11 +41,12 @@ Most demos jump directly from raw transcript to final label.
 
 This repo deliberately **does not**.
 
-It splits the reasoning into three stages:
+It splits the reasoning into four stages:
 
 1. **Instrument extraction**
 2. **Classification**
-3. **Signal extraction**
+3. **Signal evidence extraction**
+4. **Signal intent extraction**
 
 That separation matters because early mistakes are expensive.
 
@@ -53,17 +54,19 @@ If a noisy ASR phrase is wrongly normalized into the wrong benchmark, every down
 
 This workflow is designed to stop that error cascade.
 
-## The three-step pipeline
+## The four-step pipeline
 
 ```mermaid
 flowchart LR
     A[Raw transcript] --> B[Step 1<br/>Instrument extraction]
     B --> C[Step 2<br/>Classification]
-    C --> D[Step 3<br/>Signal extraction]
+    C --> D[Step 3<br/>Signal evidence extraction]
+    D --> E[Step 4<br/>Signal intent extraction]
 
     B --> B1[What is the host talking about?]
     C --> C1[How should it be tagged?]
-    D --> D1[What is the actual trading view?]
+    D --> D1[Which transcript hints matter?]
+    E --> E1[What is the actual trading view?]
 ```
 
 ## What this project can reveal
@@ -143,7 +146,8 @@ The longer-term vision is to compare creators not by charisma, but by:
 | --- | --- | --- | --- |
 | Step 1 | What did the host actually mean? | `instrument` + `instrument_normalized` | Handles ASR noise and prevents over-normalization |
 | Step 2 | How should that target be represented? | tags like `equity_benchmark_USA`, `gov_2Y`, `cmd_soybean`, `fx_basket` | Creates a stable machine-readable taxonomy |
-| Step 3 | What is the host's real trading intent? | `open_buy`, `open_sell`, `close_buy`, `close_sell`, `duplicate`, `invalid`, `unclear` | Distinguishes real signals from vague talk |
+| Step 3 | Which sentences can support a trading view? | categorized evidence hints by target | Keeps final judgment grounded and auditable |
+| Step 4 | What is the host's real trading intent? | `open_buy`, `open_sell`, `close_buy`, `close_sell`, `duplicate`, `invalid`, `unclear` | Distinguishes real signals from vague talk |
 
 ## Why the design is interesting
 
@@ -157,7 +161,7 @@ The longer-term vision is to compare creators not by charisma, but by:
   - The workflow explicitly handles slang, homophones, and noisy transcript fragments.
 
 - **Target-first signal extraction**
-  - Step 3 judges the host's view on the normalized target, not just whichever wording happened to appear.
+  - Step 3 extracts target-specific evidence, then Step 4 judges the host's view on the normalized target.
 
 - **Tactical vs directional distinction**
   - “Don’t chase” is different from “sell”.
@@ -195,16 +199,17 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
 - `pipelines/yolo`
   - dataset prep, label conversion, train, predict
 - `pipelines/llm`
-  - Step 1 extraction, Step 2 classification, visualization
+  - Step 1 extraction, Step 2 classification, Step 3 evidence extraction, Step 4 intent extraction, visualization
 - `pipelines/transcript`
   - transcript generation and cleanup
 
 ### Core logic
 
-- `template/template_20260424_2026.py`
+- `template/template_20260525_2204.py`
   - extraction schema
   - classification schema
-  - signal schema
+  - signal evidence schema
+  - signal intent schema
 - `src/llm/mq_tag_summary.py`
   - summary loading and tag aggregation
 - `src/llm/openai_api.py`
@@ -213,7 +218,7 @@ That is the kind of nuance needed to judge whether a commentator is truly useful
 ### Workflow notes
 
 - `WORKFLOW.md`
-  - detailed explanation of Step 1 / Step 2 / Step 3 responsibilities
+  - detailed explanation of Step 1 / Step 2 / Step 3 / Step 4 responsibilities
 
 ## Running the current pipeline
 
@@ -222,13 +227,15 @@ Put transcript files under `transcripts/clean/`, then run:
 ```bash
 python pipelines/llm/extract_instrument.py
 python pipelines/llm/extract_classification.py
+python pipelines/llm/extract_signal_evidence.py
+python pipelines/llm/extract_signal_intent.py
 python pipelines/llm/visualize.py
 ```
 
 The main schemas currently live in:
 
 ```text
-template/template_20260424_2026.py
+template/template_20260525_2204.py
 ```
 
 ## What this could become

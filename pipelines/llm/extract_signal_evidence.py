@@ -85,7 +85,7 @@ def build_instruments(dt: str, classification_map) -> List[dict]:
             instrument_normalized = classified_row['ua']
             ticker = classified_row.get('ticker')
             assert instrument_normalized, "missing instrument_normalized"
-            if instrument_normalized in ['unclassified']:
+            if instrument_normalized in ['unclassified', 'unknown_stock']:
                 continue
             if ticker:
                 instrument_normalized = f'{instrument_normalized}_{ticker}'
@@ -159,10 +159,11 @@ def run(batch_dates=None, debug=False):
 
 
 if __name__ == '__main__':
-    import datetime
+    # import datetime
     
-    batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
-    batchlist=  batchlist[:4]
-    # batchlist = ['20211223']
-    print(len(schema), datetime.datetime.now(), batchlist)
-    run(batchlist, debug=True)
+    # batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
+    # batchlist=  batchlist[:4]
+    # # batchlist = ['20211223']
+    # print(len(schema), datetime.datetime.now(), batchlist)
+    # run(batchlist, debug=True)
+    run()

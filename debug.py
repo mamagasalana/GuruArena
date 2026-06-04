@@ -6,14 +6,14 @@ from collections import defaultdict
 import datetime
 from itertools import zip_longest
 from copy import deepcopy
-
+import os
 
 dfsall = []
 base0 = Path("outputs/model_output/2026_05_17_signal_0_deepseek-v4-pro")
 base1 = Path("outputs/model_output/2026_05_17_signal_1_deepseek-v4-pro")
 base2 = Path("outputs/model_output/2026_05_17_signal_2_deepseek-v4-pro")
 
-non_list_group = ['instrument_normalized', 'instrument', 'invalid', 'invalid_reason']
+non_list_group = ['instrument_normalized', 'instrument']
 
 allrows = []
 for f0 in base0.iterdir():
@@ -34,10 +34,17 @@ for f0 in base0.iterdir():
         
         for signal in js['signals']:
             current_row = []
-            for k1 in non_list_group:
-                k2 = signal.pop(k1)
-                current_row.append(k2)
-
+            try:
+                for k1 in non_list_group:
+                    k2 = signal.pop(k1)
+                    current_row.append(k2)
+                signal.pop('invalid')
+                signal.pop('invalid_reason')
+            except:
+                print("error:", f)
+                os.remove(f)
+                break
+            
             dt = datetime.datetime.fromtimestamp(f.stat().st_mtime)
             current_row.append(dt)
             current_row.append(f.name.replace('.json', ''))

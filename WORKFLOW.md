@@ -1,18 +1,20 @@
 # Workflow
 
-This project currently works in 3 main steps:
+This project currently works in 4 main steps:
 
 1. Step 1: extract instrument
 2. Step 2: classify instrument
-3. Step 3: extract signal
+3. Step 3: extract signal evidence
+4. Step 4: extract signal intent
 
 The key idea is:
 
-- Step 1 should answer: "what is the speaker talking about?"
-- Step 2 should answer: "how should we tag it in our taxonomy?"
-- Step 3 should answer: "what is the host's trading view on that tagged target?"
+- Step 1 answers: "what is the speaker talking about?"
+- Step 2 answers: "how should we tag it in our taxonomy?"
+- Step 3 answers: "which same-date transcript sentences can support a signal?"
+- Step 4 answers: "what is the host's final trading intent from those hints?"
 
-All 3 jobs should stay separate.
+All 4 jobs should stay separate.
 
 ## Step 1
 
@@ -39,6 +41,10 @@ What Step 1 should not do:
 - should not invent a country, benchmark, or product wrapper unless transcript context really supports it
 - should not turn a broad factor / sector / theme into a specific index just because such an index exists
 
+Common failure mode in Step 1:
+
+- over-normalization
+
 Examples:
 
 - `周期因子` should usually stay `周期因子`, not jump to `MSCI World Cyclical Sectors Index`
@@ -46,26 +52,12 @@ Examples:
 - `四值因子` is likely ASR noise and should be corrected to `市值因子` if confidence is high
 - `两年期的国债期货` should only become a US-specific treasury product if transcript context clearly supports that
 
-Common failure mode in Step 1:
-
-- over-normalization
-
-This means the extractor takes a broad idea and converts it into a too-specific object.
-
-Examples:
-
-- generic factor -> specific MSCI index
-- generic China equity mention -> specific benchmark
-- generic bond mention -> specific US Treasury instrument
-
-The downstream problem is that Step 2 then trusts that over-specific norm and tags it accordingly.
-
 ## Step 2
 
 Entry:
 
 - [pipelines/llm/extract_classification.py](/home/ytee/test/GuruArena/pipelines/llm/extract_classification.py)
-- schema lives in [template/template_20260424_2026.py](/home/ytee/test/GuruArena/template/template_20260424_2026.py)
+- schema lives in [template/template_20260525_2204.py](/home/ytee/test/GuruArena/template/template_20260525_2204.py)
 
 Purpose:
 
@@ -101,144 +93,188 @@ What Step 2 should not do:
 - should not casually override a good normalized instrument
 - should not invent a more specific entity than the normalized input supports
 
-Examples:
-
-- `周期因子` -> `equity_factorCyclical`
-- `市值因子` -> `equity_factorSize`
-- `大豆期货` -> `cmd_soybean`
-- `Asia Dollar Index` -> `fx_basket`, `ASIAPAC`
-
 ## Step 3
+
+Entry:
+
+- [pipelines/llm/extract_signal_evidence.py](/home/ytee/test/GuruArena/pipelines/llm/extract_signal_evidence.py)
+- schema lives in [template/template_20260525_2204.py](/home/ytee/test/GuruArena/template/template_20260525_2204.py)
 
 Purpose:
 
-- take the full transcript
+- read the full transcript for one date at a time
 - take the helper generated after Step 1 and Step 2
-- extract trading signals on the final target
+- extract only the sentences that may contribute to final signal judgment
+- keep evidence categorized so the final intent decision is auditable
 
 Current helper shape:
 
 ```json
 {
-  "instrument": ["美国股市", "标普500", "道琼指数"],
-  "instrument_normalized": "equity_benchmark_USA"
+  "instruments": [
+    {
+      "instrument": ["美国股市", "标普500", "道琼指数"],
+      "instrument_normalized": "equity_benchmark_USA"
+    }
+  ],
+  "ocr_text": "..."
 }
 ```
 
-Important:
+Step 3 output shape:
 
-- in Step 3, `instrument_normalized` is the real target
-- `instrument` is only helper text for locating that target in the transcript
-- Step 3 should not re-extract or re-classify the target unless it is clearly invalid or a weaker duplicate
+```json
+{
+  "signals": [
+    {
+      "instrument": ["美国股市", "标普500", "道琼指数"],
+      "instrument_normalized": "equity_benchmark_USA",
+      "direction_evidence": [],
+      "action_evidence": [],
+      "price_level_evidence": [],
+      "technical_evidence": [],
+      "conditional_evidence": [],
+      "rhetoric_evidence": [],
+      "negation_uncertainty_evidence": [],
+      "other_evidence": [],
+      "invalid": false,
+      "invalid_reason": null
+    }
+  ]
+}
+```
 
 What Step 3 should do:
 
-- read the full transcript
-- use `instrument` to find where the target is discussed
-- judge the host's trading view on `instrument_normalized`
-- output:
-  - `open_buy`
-  - `open_sell`
-  - `close_buy`
-  - `close_sell`
-  - `unclear`
-  - `invalid`
-  - `duplicate`
+- cover every helper item
+- copy `instrument` and `instrument_normalized`
+- extract continuous transcript substrings exactly into `text`
+- summarize why each evidence item matters
+- mark invalid when the helper item is merely mentioned, used as historical example, used as information source, or clearly mismatched
 
 What Step 3 should not do:
 
-- should not rewrite helper fields
-- should not turn one helper row into a different target
-- should not output `unclear` together with a stronger signal for the same helper row
-- should not output `invalid` together with any directional signal for the same helper row
+- should not conclude the final intent
+- should not merge views across dates
+- should not re-classify or rewrite helper targets
+- should not invent evidence not present in the transcript
 
-Multi-signal rule:
+## Step 4
 
-- one helper item may output multiple signals
-- but only if the intents are different
-- example:
-  - same helper item can output one `open_buy` and one `open_sell`
-- if multiple transcript spans support the same intent, they should be merged into one signal
+Entry:
 
-Duplicate rule:
+- [pipelines/llm/extract_signal_intent.py](/home/ytee/test/GuruArena/pipelines/llm/extract_signal_intent.py)
+- schema lives in [template/template_20260525_2204.py](/home/ytee/test/GuruArena/template/template_20260525_2204.py)
 
-- `duplicate` only applies across different helper items
-- it starts from overlapping raw `instrument` wording
-- then Step 3 decides which `instrument_normalized` is the better fit for the transcript
-- the weaker one becomes `duplicate`
+Purpose:
 
-Example:
+- consume Step 3 signal evidence, grouped by date
+- merge evidence batches `0-2` for the same date
+- flatten `direction_evidence`, `action_evidence`, `price_level_evidence`, and other evidence buckets into one `evidence` list with a `type` field
+- skip Step 3 rows marked `invalid`
+- deduplicate repeated evidence hints by `type` and exact text
+- conclude the final host intent for each helper item
 
-- `['电力股', '特高压'] -> equity_sector11Utilities`
-- `['电力股'] -> equity_sector11Utilities_CHN`
+Step 4 input shape:
 
-If the transcript is clearly discussing China/A-share utilities, then:
+```json
+{
+  "dt": "20230525",
+  "signal_evidence": [
+    {
+      "instrument": ["美国股市", "标普500", "道琼指数"],
+      "instrument_normalized": "equity_benchmark_USA",
+      "evidence": [
+        {
+          "type": "direction",
+          "text": "...",
+          "summary": "..."
+        }
+      ]
+    }
+  ]
+}
+```
 
-- `equity_sector11Utilities_CHN` should keep the real signal
-- `equity_sector11Utilities` should become `duplicate`
+Step 4 output shape:
 
-ADR / local stock rule:
+```json
+{
+  "signals": [
+    {
+      "instrument": ["美国股市", "标普500", "道琼指数"],
+      "instrument_normalized": "equity_benchmark_USA",
+      "intent": "open_sell",
+      "evidence": ["..."],
+      "summary": ["..."]
+    }
+  ]
+}
+```
 
-- if a local/origin-market row and an ADR row both exist for the same company
-- default keep the local/origin-market row
-- ADR should usually become `duplicate`
-- only keep ADR when it is the only usable choice or the transcript clearly points to the ADR / US-listed line
+What Step 4 should do:
 
-## Why Aliases Matter
+- use only Step 3 evidence from the same date
+- copy helper fields exactly
+- output one or more final signals per helper item
+- read evidence from `evidence[*].text`, using `evidence[*].type` as the evidence category
+- merge repeated evidence supporting the same intent
+- allow multiple intents only when the same helper item has genuinely different views
+- use `invalid`, `unclear`, and `duplicate` as exclusive fallback labels
 
-Classification works much better when the model sees aliases.
+What Step 4 should not do:
 
-Bad pattern:
+- should not read transcript files directly
+- should not use evidence from other dates
+- should not add instruments outside the Step 3 evidence input
+- should not rewrite `instrument` or `instrument_normalized`
 
-- classify only from one normalized string
+Intent labels:
 
-Better pattern:
+- `open_buy`: bullish exposure, buy, add, layout, or clear upside thesis
+- `open_sell`: bearish exposure, sell, short, avoid due to downside thesis
+- `close_buy`: reduce/avoid current long exposure, do not chase, wait, hold cash
+- `close_sell`: reduce/avoid current short exposure, cover, do not keep shorting
+- `unclear`: valid discussion but insufficient final trading intent
+- `invalid`: not a usable trading discussion for this helper item
+- `duplicate`: another helper item better represents the same discussion target
 
-- classify from:
-  - `instrument_normalized`
-  - aliases from transcript raw values
+## Duplicate Handling
 
-Why this helps:
+`duplicate` only applies across different helper items.
 
-- aliases give extra evidence
-- aliases help recover ASR noise
-- aliases help detect whether the norm is too broad or too specific
+Typical cases:
 
-But aliases should still be secondary.
+- overlapping raw `instrument` wording
+- local stock vs ADR for the same company
+- a broad taxonomy target and a more specific country/tag target for the same discussion
 
-They are supporting evidence, not the main anchor.
+Default preference:
+
+- keep the local/origin-market stock over ADR unless the transcript clearly points to the ADR or US-listed line
+- keep the more context-specific taxonomy target when the transcript makes geography or market scope clear
 
 ## Trust Hierarchy
 
-The intended trust order is:
+The intended trust order through the pipeline is:
 
-1. `instrument_normalized`
-2. aliases
-3. fallback financial common knowledge
+1. Transcript evidence
+2. Step 1 normalized target
+3. Step 2 taxonomy tag
+4. Step 3 evidence summaries
+5. conservative financial common knowledge only where the schema explicitly allows it
 
-This means:
+For Step 4 specifically, trust only current-date Step 3 evidence. This is the guardrail that prevents one date's intent from contaminating another date.
 
-- if Step 1 produced a good norm, Step 2 should mostly preserve it
-- if Step 1 produced a weak or clearly wrong norm, aliases may help recover it
-- if neither is enough, Step 2 may use common financial knowledge conservatively
+## Running
 
-## Typical Error Split
-
-When something looks wrong, it is useful to decide whether it is a Step 1 problem or a Step 2 problem.
-
-Usually it is a Step 1 problem if:
-
-- a generic concept became a specific branded product
-- a country was injected too early
-- a benchmark identity was invented
-- obvious ASR noise was preserved as a fake new concept
-
-Usually it is a Step 2 problem if:
-
-- the norm is fine, but the taxonomy tag is wrong
-- the model falls back to `unclassified` even though a clear tag exists
-- a specific existing label like `cmd_soybean` is missed and replaced with `cmd_other`
-- a sector / factor / benchmark choice is inconsistent with the taxonomy rules
+```bash
+python pipelines/llm/extract_instrument.py
+python pipelines/llm/extract_classification.py
+python pipelines/llm/extract_signal_evidence.py
+python pipelines/llm/extract_signal_intent.py
+python pipelines/llm/visualize.py
+```
 
 ## Summary
 
@@ -246,9 +282,7 @@ Short version:
 
 - Step 1 is semantic extraction and normalization
 - Step 2 is taxonomy tagging
-- Step 3 is transcript-grounded signal extraction on the tagged target
+- Step 3 is transcript-grounded evidence extraction
+- Step 4 is same-date intent conclusion from evidence
 
-If Step 1 becomes too aggressive, Step 2 will look wrong even when the schema is fine.
-
-If Step 1 stays conservative and clean, Step 2 becomes much easier and more stable.
-If Step 3 stays anchored on `instrument_normalized` while using `instrument` only as locator text, signal extraction becomes more consistent and easier to audit.
+If Step 3 stays evidence-only, Step 4 becomes easier to audit. If Step 4 only sees one date at a time, host intent does not leak across episodes.

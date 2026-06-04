@@ -56,10 +56,10 @@ def build_app(
     )
 
 
-def list_batch_dates(transcript_glob: str) -> List[str]:
+def list_batch_dates(transcript_glob: str, dt_size=6) -> List[str]:
     batch_date = set()
     for transcript_file in glob.glob(transcript_glob):
-        dt = os.path.basename(transcript_file)[:7] + '*'
+        dt = os.path.basename(transcript_file)[:dt_size] + '*'
         batch_date.add(dt)
     return sorted(batch_date)
 
