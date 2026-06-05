@@ -108,16 +108,16 @@ def run(batch_dates=None, debug=False):
         dates.append(dt)
         texts.append(json.dumps(payload, ensure_ascii=False))
 
-    for batch, app in apps.items():
-        try:
-            pbar.set_postfix(dt=dt, batch=batch, files=len(dates))
-            app.run_batch_multiprocess(
-                texts_to_items2(texts, dates),
-                show_progress=False,
-                force=debug,
-            )
-        except Exception as e:
-            errlist.append((dt, batch, str(e)))
+        for batch, app in apps.items():
+            try:
+                pbar.set_postfix(dt=dt, batch=batch, files=len(dates))
+                app.run_batch_multiprocess(
+                    texts_to_items2(texts, dates),
+                    show_progress=False,
+                    force=debug,
+                )
+            except Exception as e:
+                errlist.append((dt, batch, str(e)))
 
     return errlist
 
