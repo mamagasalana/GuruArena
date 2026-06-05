@@ -56,7 +56,7 @@ for f0 in base0.iterdir():
                 allrows.append(deepcopy(current_row2))
 
 cols=  non_list_group + ['mtime', 'dt', 'batch']  + list(signal.keys())
-pd.DataFrame(allrows, columns=cols).to_csv('review.csv', index=False)
+pd.DataFrame(allrows, columns=cols).to_csv('review_evidence.csv', index=False)
 
 
 dates = ["20211220", "20211221", "20211222", "20211223"]
@@ -82,5 +82,5 @@ for batch in range(3):
         shutil.copy2(src_file, dst_file)
         shutil.copy2(src_file2, dst_file2)
 
-shutil.copy2('review.csv', debug_dir/"review.csv")
+shutil.copy2('review_evidence.csv', debug_dir/"review.csv")
 print(f"Copied debug files to: {debug_dir}")

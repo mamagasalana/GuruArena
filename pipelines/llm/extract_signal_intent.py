@@ -64,12 +64,13 @@ def merge_evidence_rows(rows: Iterable[dict]) -> dict:
 
             evidence_type = evidence_type.removesuffix('_evidence')
             for ev in evidence:
-                ev2 = {'type' : evidence_type}
-                ev2.update(ev)
+                ev2 = {'type' : evidence_type, 'summary': ev['summary']}
                 merged[key].append(ev2)
 
     ret = []
     for (instrument_normalized, instrument), ev in merged.items():
+        if not ev:
+            continue
         ev2 = {
             'instrument_normalized': instrument_normalized,
             'instrument' : list(instrument),
@@ -99,6 +100,7 @@ def run(batch_dates=None, debug=False):
     texts = []
     pbar = tqdm(batch_dates, desc='build signal intent input', unit='day')
     for dt in pbar:
+        pbar.set_postfix(dt=dt, files=len(batch_dates))
         raw = load_evidence_rows(dt)
         if not raw:
             continue
@@ -107,17 +109,17 @@ def run(batch_dates=None, debug=False):
             continue
         dates.append(dt)
         texts.append(json.dumps(payload, ensure_ascii=False))
+        
 
-        for batch, app in apps.items():
-            try:
-                pbar.set_postfix(dt=dt, batch=batch, files=len(dates))
-                app.run_batch_multiprocess(
-                    texts_to_items2(texts, dates),
-                    show_progress=False,
-                    force=debug,
-                )
-            except Exception as e:
-                errlist.append((dt, batch, str(e)))
+    for batch, app in apps.items():
+        try:
+            app.run_batch_multiprocess(
+                texts_to_items2(texts, dates),
+                show_progress=True,
+                force=debug,
+            )
+        except Exception as e:
+            errlist.append(('all', batch, str(e)))
 
     return errlist
 
@@ -126,8 +128,7 @@ if __name__ == '__main__':
     
     batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
     batchlist=  batchlist[:4]
-    batchlist = ['20211220']
+    # batchlist = ['20211220']
     print(len(schema), datetime.datetime.now(), batchlist)
-    
     run(batchlist, debug=True)
 

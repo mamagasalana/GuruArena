@@ -172,7 +172,6 @@ Purpose:
 - merge evidence batches `0-2` for the same date
 - flatten `direction_evidence`, `action_evidence`, `price_level_evidence`, and other evidence buckets into one `evidence` list with a `type` field
 - skip Step 3 rows marked `invalid`
-- deduplicate repeated evidence hints by `type` and exact text
 - conclude the final host intent for each helper item
 
 Step 4 input shape:
@@ -187,7 +186,6 @@ Step 4 input shape:
       "evidence": [
         {
           "type": "direction",
-          "text": "...",
           "summary": "..."
         }
       ]
@@ -217,7 +215,7 @@ What Step 4 should do:
 - use only Step 3 evidence from the same date
 - copy helper fields exactly
 - output one or more final signals per helper item
-- read evidence from `evidence[*].text`, using `evidence[*].type` as the evidence category
+- read evidence from `evidence[*].summary`, using `evidence[*].type` as the evidence category
 - merge repeated evidence supporting the same intent
 - allow multiple intents only when the same helper item has genuinely different views
 - use `invalid`, `unclear`, and `duplicate` as exclusive fallback labels

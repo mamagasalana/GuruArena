@@ -286,7 +286,7 @@ SCHEMA_VERSION=2026-05-24T00:00:00
 """
 
 
-Intent = Literal["open_buy", "open_sell", "close_buy", "close_sell", "unclear", "duplicate"]
+Intent = Literal["open_buy", "open_sell", "close_buy", "close_sell", "unclear"]
 
 
 class TradingSignalBase(BaseModel):
@@ -302,7 +302,7 @@ class TradingSignalBase(BaseModel):
     )
     intent: Intent = Field(
         ...,
-        description="最终交易意图，只能是 open_buy / open_sell / close_buy / close_sell / unclear / duplicate"
+        description="最终交易意图，只能是 open_buy / open_sell / close_buy / close_sell / unclear"
     )
 
 
@@ -325,7 +325,6 @@ SCHEMA_VERSION=2026-06-04T00:00:00
   - `evidence`
 - `evidence` 是一个扁平列表；每个 item 包含：
   - `type`：由上游 evidence key 去掉 `_evidence` 得到，例如 direction / action / price_level / technical / conditional / rhetoric / negation_uncertainty / other
-  - `text`：Transcript 原文证据片段
   - `summary`：上游对该证据含义的解释
 
 重要背景：
@@ -333,18 +332,16 @@ SCHEMA_VERSION=2026-06-04T00:00:00
 - Step 4 输入只包含上游保留下来的有效 helper item；因此你只需要覆盖当前 Input array 中实际出现的 helper item。
 - 你现在是 Step 4，只能根据当前 Input 中的 evidence 判断最终 intent。
 - Input 已按日期切分；不得引入其他日期、其他节目、市场常识或外部信息。
-- evidence item 的 `text` 是 Transcript 原文片段；`summary` 是上游对该片段含义的解释。
 
 任务：
 对 Input array 中每个 helper item，判断主持人对 `instrument_normalized` 的最终交易意图，并输出 signals。
 
 intent 枚举：
-- `open_buy`：主持人认为该标的价格接下来更可能上涨，或认为当前/未来某个可执行位置具备上涨空间。重点是“预期价格会上去”，不要求出现买入、布局、做多等关键词；可以来自低估/超跌反弹/底部形成，也可以来自趋势延续。
-- `open_sell`：主持人认为该标的价格接下来更可能下跌，或认为当前/未来某个可执行位置具备下跌空间。重点是“预期价格会下去”，不要求出现卖出、做空等关键词。
-- `close_buy`：主持人不认为当前适合买入或继续追高，因为价格已经上涨一段、估值/涨幅/叙事/资金等支撑当前价格的理由已经耗尽或明显变弱。close_buy 不是预期价格会下跌；它表达“当前不买/不追/等待更低位置”，因为市场即使偏贵也可能维持非理性很久。
-- `close_sell`：主持人不认为当前适合继续看跌，因为价格已经下跌一段、估值/跌幅/叙事/资金等支撑继续下跌的理由已经耗尽或明显变弱。close_sell 不是预期价格会上涨；它表达“当前不看跌/不追跌/等待更高位置”，因为市场即使偏便宜也可能维持非理性很久。
+- `open_buy`：主持人认为该标的价格接下来更可能上涨，主持人有上涨的理由
+- `open_sell`：主持人认为该标的价格接下来更可能下跌，主持人有下跌的理由
+- `close_buy`：主持人认为该标的价格接下来涨不动了，或者没有上涨的理由了
+- `close_sell`：主持人认为该标的价格接下来跌不动了，或者没有下跌的理由了
 - `unclear`：证据有效但不足以形成可执行或方向明确的交易意图。
-- `duplicate`：该 helper item 与另一个 helper item 明显指向同一个讨论目标，而另一个 item 更贴切、更具体或更应该保留真实 signal。
 
 核心规则：
 1. 覆盖性：必须覆盖 Input array 中的全部 helper item；每个 helper item 至少输出一条 signal。
@@ -352,27 +349,11 @@ intent 枚举：
 3. 字段复制：signal.instrument 与 signal.instrument_normalized 必须直接复制对应 Input item，不得改写。
 4. 判断来源：intent 只能根据对应 Input item 的 evidence 判断；不得引入 Input 之外事实。
 5. 同 intent 合并：同一 helper item 如果有多条 evidence 支持同一个 intent，应合并为一条 signal。
-6. 输出最小化：signal 只输出 instrument / instrument_normalized / intent；不要输出 evidence、summary、reason、confidence 或其他字段。
-7. 多 intent 拆分：同一 helper item 只有在证据明确支持不同 intent 时，才允许输出多条 signal；每条 signal 只表达一个 intent。
-8. fallback 互斥：对同一 helper item，如果已经输出 open_buy / open_sell / close_buy / close_sell / duplicate，不要再额外输出 unclear。
-9. duplicate 互斥：对同一 helper item，如果输出 duplicate，通常不得再输出 open_buy / open_sell / close_buy / close_sell / unclear，除非 evidence 明确显示它除了重复关系外还有独立交易意图；默认 duplicate 是兜底覆盖结果。
-
-判断优先级：
-1. 若多个 helper item 的 instrument 或 evidence 明显重叠，并且其中一个 instrument_normalized 更贴切当前讨论目标 → 弱者 duplicate，强者保留真实 intent。
-2. 先判断主持人对未来价格方向的核心预期：若证据整体指向价格会上涨 → open_buy；若证据整体指向价格会下跌 → open_sell。
-3. 若主持人认为价格已涨一段、当前估值或上涨理由已经耗尽，但没有表达未来价格将继续下跌 → close_buy。不要把“贵了/不要追/理由耗尽”自动当成 open_sell。
-4. 若主持人认为价格已跌一段、当前估值或下跌理由已经耗尽，但没有表达未来价格将开始上涨 → close_sell。不要把“跌深/下跌理由耗尽”自动当成 open_buy。
-5. `type=action` 的 evidence 有高权重，但不是唯一依据；direction / price_level / technical / conditional / rhetoric / negation_uncertainty 等类型只要共同表达清楚的未来价格判断，也可以决定 intent。
-6. 若证据只是市场事实、背景说明、风险提醒或条件过弱，无法形成未来价格方向或“当前不买/当前不看跌”的战术判断 → unclear。
+6. 多 intent 拆分：同一 helper item 只有在证据明确支持不同 intent 时，才允许输出多条 signal；每条 signal 只表达一个 intent。
+7. fallback 互斥：对同一 helper item，如果已经输出 open_buy / open_sell / close_buy / close_sell，不要再额外输出 unclear。
 
 主持人风格提示：
-- 主持人偏好买低卖高，但也可能接受趋势延续；不要只因为“涨过一段”就排除 open_buy，关键是他是否认为后面仍有上涨空间。
-- 主持人常用估值、技术形态、资金流向、风险提醒、反向思考来表达未来价格判断，不一定直接说“买”或“卖”。
-- “注意风险”“要观察”如果只是方向判断后的常规谨慎提醒，不应抵消 open_buy/open_sell。
-- “不要追”“现在不适合”“保持现金”“等拉回”通常表示 close_buy：不是预期价格会下跌，而是当前不值得买。
-
-输出：
-- 仅输出合法 JSON。
-- 顶层必须是 `signals`。
-- 每个 signal 只能包含 `instrument`、`instrument_normalized`、`intent`。
+- 主持人极少直接说出交易结论，而是通过一连串论述构建方向弧线，最后以修辞提示结尾让观众自行推断。信号在弧线中，不在单一句子里。如果证据链整体方向一致，应按弧线指向判断 intent
+- 主持人的常规风险提醒（如"注意风险""要观察"）是其口头禅，不构成第二条弧线，也不应抵消 arc 指向的 intent。
+- 主持人偏好买低卖高，但也可能接受趋势延续。
 """
