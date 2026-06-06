@@ -38,39 +38,18 @@ CLASSIFICATION_MODEL = 'deepseek-v4-pro'
 SIGNAL_MODEL = 'deepseek-v4-pro'
 SIGNAL_OUTPUT_PREFIX = '2026_05_17_signal'
 BATCHES = range(3)
-
-
-def build_classification_map():
-    return get_tag_summary(
-        prefix=INSTRUMENT_OUTPUT_PREFIX,
-        model=INSTRUMENT_MODEL,
-        model_class=CLASSIFICATION_MODEL,
-        classification_prefix=CLASSIFICATION_OUTPUT_PREFIX,
-        batches=BATCHES,
-    )['classification_map']
-
+OUTPUT_ROOT = Path('outputs') / 'model_output'
 
 def load_instrument_rows(dt: str) -> List[dict]:
     rows = []
     for batch in BATCHES:
-        instrument_path = os.path.join(
-            'outputs',
-            'model_output',
-            f'{INSTRUMENT_OUTPUT_PREFIX}_{batch}_{INSTRUMENT_MODEL}',
-            f'{dt}.json',
-        )
-        if not os.path.exists(instrument_path):
+        path = OUTPUT_ROOT / f'{INSTRUMENT_OUTPUT_PREFIX}_{batch}_{INSTRUMENT_MODEL}/{dt}.json'
+        if not path.exists():
             continue
-
-        try:
-            with open(instrument_path, 'r', encoding='utf-8-sig') as ifile:
-                payload = json.load(ifile)
-        except Exception:
-            continue
-
+        with open(path, 'r', encoding='utf-8-sig') as ifile:
+            payload = json.load(ifile)
         rows.extend(payload.get('instruments', []))
     return rows
-
 
 def build_instruments(dt: str, classification_map) -> List[dict]:
     helper_map = OrderedDict()
@@ -128,7 +107,13 @@ def run(batch_dates=None, debug=False):
         BATCHES,
         temperature=0,
     )
-    classification_map = build_classification_map()
+    classification_map = get_tag_summary(
+        prefix=INSTRUMENT_OUTPUT_PREFIX,
+        model=INSTRUMENT_MODEL,
+        model_class=CLASSIFICATION_MODEL,
+        classification_prefix=CLASSIFICATION_OUTPUT_PREFIX,
+        batches=BATCHES,
+        )['classification_map']
     errlist = []
 
     if batch_dates is None:

@@ -32,12 +32,12 @@ SIGNAL_EVIDENCE_MODEL = 'deepseek-v4-pro'
 SIGNAL_INTENT_OUTPUT_PREFIX = '2026_06_04_signal_intent'
 SIGNAL_INTENT_MODEL = 'deepseek-v4-pro'
 BATCHES = range(3)
-EVIDENCE_ROOT = Path('outputs') / 'model_output'
+OUTPUT_ROOT = Path('outputs') / 'model_output'
 
 def load_evidence_rows(dt: str) -> List[dict]:
     rows = []
     for batch in BATCHES:
-        path = EVIDENCE_ROOT / f'{SIGNAL_EVIDENCE_OUTPUT_PREFIX}_{batch}_{SIGNAL_EVIDENCE_MODEL}/{dt}.json'
+        path = OUTPUT_ROOT / f'{SIGNAL_EVIDENCE_OUTPUT_PREFIX}_{batch}_{SIGNAL_EVIDENCE_MODEL}/{dt}.json'
         if not path.exists():
             continue
         with open(path, 'r', encoding='utf-8-sig') as ifile:
@@ -45,15 +45,26 @@ def load_evidence_rows(dt: str) -> List[dict]:
         rows.extend(payload.get('signals', []))
     return rows
 
-def merge_evidence_rows(rows: Iterable[dict]) -> dict:
+def merge_evidence_rows(rows: Iterable[dict], return_invalid=False) -> List[dict]:
     merged = OrderedDict()
+    invalid = set()
+
 
     for row in rows:
-        if row['invalid']:
-            continue
         instrument = row['instrument']
         instrument_normalized = row['instrument_normalized']
         key = (instrument_normalized, tuple(instrument))
+
+        if row['invalid']:
+            invalid.add(instrument_normalized)
+            if return_invalid:
+                if key not in merged:
+                    merged[key] = []
+                merged[key].append({'type' : 'invalid', 'summary': row['invalid_reason']})
+            continue
+        
+        if return_invalid:
+            continue
 
         if key not in merged:
             merged[key] = []
@@ -70,6 +81,8 @@ def merge_evidence_rows(rows: Iterable[dict]) -> dict:
     ret = []
     for (instrument_normalized, instrument), ev in merged.items():
         if not ev:
+            continue
+        if instrument_normalized in invalid and not return_invalid:
             continue
         ev2 = {
             'instrument_normalized': instrument_normalized,
@@ -126,9 +139,8 @@ def run(batch_dates=None, debug=False):
 if __name__ == '__main__':
     import datetime
     
-    batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
-    batchlist=  batchlist[:4]
-    # batchlist = ['20211220']
-    print(len(schema), datetime.datetime.now(), batchlist)
-    run(batchlist, debug=True)
+    # batchlist = ["20211220","20211221","20211222","20211223","20211224","20211227","20211228","20211229","20251118","20260320","20260323","20260324","20260325","20260326","20260327","20260401","20260402"]
+    # print(len(schema), datetime.datetime.now(), batchlist)
+    # run(batchlist)
 
+    run()
