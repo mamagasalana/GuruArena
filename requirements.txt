@@ -8,12 +8,12 @@ kaleido
 rapidocr-onnxruntime
 onnxruntime-gpu==1.23.2
 paddlepaddle
-ultralytics
+ultralytics==8.4.50
 label-studio
 python-dotenv
 Pillow
 opencv-python
-numpy
+numpy==2.4.4
 pandas
 opencc-python-reimplemented
 nbformat>=4.2.0
@@ -21,3 +21,5 @@ nbformat>=4.2.0
 torch==2.7.0+cu128
 torchvision==0.22.0+cu128
 torchaudio==2.7.0+cu128
+ctranslate2==4.7.1
+huggingface-hub==1.14.0

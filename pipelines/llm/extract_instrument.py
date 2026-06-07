@@ -84,9 +84,9 @@ def run(batch_dates=None, debug=False):
 if __name__ == '__main__':
     import datetime
     print(len(schema), datetime.datetime.now())
-    MODEL = 'mimo-v2.5-pro'
-    OUTPUT_PREFIX = '2026_05_17_t1'
-    run()
+    # MODEL = 'mimo-v2.5-pro'
+    # OUTPUT_PREFIX = '2026_05_17_t1'
+    # run()
     MODEL = 'deepseek-v4-pro'
     OUTPUT_PREFIX = '2026_05_17_t1'
     run()

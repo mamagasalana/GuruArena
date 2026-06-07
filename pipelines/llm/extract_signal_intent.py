@@ -93,7 +93,7 @@ def merge_evidence_rows(rows: Iterable[dict], return_invalid=False) -> List[dict
     return ret
 
 
-def run(batch_dates=None, debug=False):
+def run(batch_dates=None, debug=False, dry_run=False):
     apps = build_batch_apps(
         template,
         schema,
@@ -122,7 +122,9 @@ def run(batch_dates=None, debug=False):
             continue
         dates.append(dt)
         texts.append(json.dumps(payload, ensure_ascii=False))
-        
+    
+    if dry_run:
+        return
 
     for batch, app in apps.items():
         try:

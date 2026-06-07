@@ -67,6 +67,13 @@ OCR_DEBUG_DIR = str(ROOT / 'ocr' / 'debug')
 providers = ort.get_available_providers()
 USE_CUDA = 'CUDAExecutionProvider' in providers
 
+# adapt to my local workflow
+USE_CUDA = False
+YOLO_DEVICE = 'cpu'
+N_WORKERS = 1
+VERBOSE = True
+SHOW_FRAME_TQDM = True
+
 ocr_kwargs = {
     'det_use_cuda': USE_CUDA,
     'cls_use_cuda': USE_CUDA,
